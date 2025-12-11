@@ -1,122 +1,17 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Онлайн Рисовалка | Коллективный Холст</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>Real-Time Multiplayer Game</title>
+    <style>
+        canvas { border: 1px solid black; }
+        .player { position: absolute; }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1><i class="fas fa-paint-brush"></i> Онлайн Рисовалка</h1>
-            <p class="subtitle">Рисуйте вместе с другими в реальном времени!</p>
-            <div class="connection-status" id="connectionStatus">
-                <span class="status-dot"></span>
-                <span>Подключение к серверу...</span>
-            </div>
-        </header>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="players"></div>
 
-        <main>
-            <div class="app-wrapper">
-                <!-- Панель инструментов -->
-                <div class="toolbar">
-                    <div class="tool-group">
-                        <h3><i class="fas fa-brush"></i> Инструменты</h3>
-                        <div class="tools">
-                            <button class="tool-btn active" data-tool="brush" title="Кисть">
-                                <i class="fas fa-paint-brush"></i>
-                            </button>
-                            <button class="tool-btn" data-tool="eraser" title="Ластик">
-                                <i class="fas fa-eraser"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="tool-group">
-                        <h3><i class="fas fa-palette"></i> Цвета</h3>
-                        <div class="color-picker">
-                            <div class="color-option" style="background-color: #000000;" data-color="#000000"></div>
-                            <div class="color-option" style="background-color: #ff3b30;" data-color="#ff3b30"></div>
-                            <div class="color-option" style="background-color: #4cd964;" data-color="#4cd964"></div>
-                            <div class="color-option" style="background-color: #007aff;" data-color="#007aff"></div>
-                            <div class="color-option" style="background-color: #5856d6;" data-color="#5856d6"></div>
-                            <div class="color-option" style="background-color: #ff9500;" data-color="#ff9500"></div>
-                            <div class="color-option" style="background-color: #ffcc00;" data-color="#ffcc00"></div>
-                            <div class="color-option" style="background-color: #ffffff; border: 2px solid #ddd;" data-color="#ffffff"></div>
-                            <input type="color" id="customColor" class="color-custom" value="#ff3b30">
-                        </div>
-                    </div>
-
-                    <div class="tool-group">
-                        <h3><i class="fas fa-sliders-h"></i> Размер</h3>
-                        <div class="size-control">
-                            <input type="range" id="brushSize" min="1" max="50" value="5">
-                            <div class="size-preview" id="sizePreview"></div>
-                            <span id="sizeValue">5px</span>
-                        </div>
-                    </div>
-
-                    <div class="tool-group">
-                        <h3><i class="fas fa-users"></i> Онлайн</h3>
-                        <div class="online-counter">
-                            <i class="fas fa-user"></i>
-                            <span id="onlineCount">1</span> пользователей
-                        </div>
-                    </div>
-
-                    <div class="tool-group actions">
-                        <button id="saveBtn" class="action-btn">
-                            <i class="fas fa-save"></i> Сохранить
-                        </button>
-                        <button id="clearBtn" class="action-btn danger">
-                            <i class="fas fa-trash"></i> Очистить
-                        </button>
-                        <button id="undoBtn" class="action-btn" disabled>
-                            <i class="fas fa-undo"></i> Отменить
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Холст для рисования -->
-                <div class="canvas-container">
-                    <div class="canvas-header">
-                        <h3><i class="fas fa-expand-arrows-alt"></i> Холст</h3>
-                        <div class="canvas-info">
-                            <span id="lastUpdated">Загрузка...</span>
-                        </div>
-                    </div>
-                    <div class="canvas-wrapper">
-                        <canvas id="drawingCanvas" width="800" height="600">
-                            Ваш браузер не поддерживает Canvas
-                        </canvas>
-                        <div class="canvas-grid"></div>
-                    </div>
-                    <div class="canvas-hint">
-                        <i class="fas fa-info-circle"></i>
-                        Рисуйте мышкой или касанием. Изменения сохраняются автоматически.
-                    </div>
-                </div>
-            </div>
-        </main>
-
-        <footer>
-            <p>
-                <i class="fas fa-code"></i> Создано с использованием 
-                <a href="https://pages.github.com/" target="_blank">GitHub Pages</a> и 
-                <a href="https://supabase.com/" target="_blank">Supabase</a>
-            </p>
-            <p class="footer-note">
-                <i class="fas fa-sync-alt"></i> Изменения синхронизируются в реальном времени
-            </p>
-        </footer>
-    </div>
-
-    <!-- Загрузка библиотек -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-client.js"></script>
-    <script src="canvas-manager.js"></script>
-    <script src="app.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="game.js"></script>
 </body>
 </html>
