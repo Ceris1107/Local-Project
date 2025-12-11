@@ -15,17 +15,32 @@ class CanvasManager {
         this.history = [];
         this.maxHistory = 20;
         
+        // Для предотвращения циклических обновлений
+        this.isLoadingExternal = false;
+        this.lastSavedData = null;
+        
         // Оптимизация
         this.debounceTimer = null;
-        this.debounceDelay = 500; // 0.5 секунды
+        this.saveDelay = 300; // 300ms дебаунс для сохранения
+        
+        // Счетчик обновлений для отладки
+        this.updateCount = 0;
         
         this.init();
     }
 
     init() {
+        console.log('🎨 Инициализация CanvasManager...');
+        
         // Настройка контекста
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
+        this.ctx.strokeStyle = this.currentColor;
+        this.ctx.lineWidth = this.currentSize;
+        
+        // Создаем белый фон
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
         // Обработчики событий мыши
         this.canvas.addEventListener('mousedown', this.startDrawing.bind(this));
@@ -34,15 +49,17 @@ class CanvasManager {
         this.canvas.addEventListener('mouseout', this.stopDrawing.bind(this));
         
         // Обработчики событий касания
-        this.canvas.addEventListener('touchstart', this.handleTouch.bind(this));
-        this.canvas.addEventListener('touchmove', this.handleTouch.bind(this));
+        this.canvas.addEventListener('touchstart', this.handleTouch.bind(this), { passive: false });
+        this.canvas.addEventListener('touchmove', this.handleTouch.bind(this), { passive: false });
         this.canvas.addEventListener('touchend', this.stopDrawing.bind(this));
         
-        // Загрузка сохраненного изображения
-        this.loadImage();
+        // Отключение контекстного меню на canvas
+        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
         
         // Обновление превью размера кисти
         this.updateBrushPreview();
+        
+        console.log('✅ CanvasManager инициализирован');
     }
 
     // Установка инструмента
@@ -52,26 +69,24 @@ class CanvasManager {
         // Обновление курсора
         this.canvas.style.cursor = tool === 'eraser' ? 'cell' : 'crosshair';
         
-        // Если ластик, устанавливаем цвет фона
-        if (tool === 'eraser') {
-            this.ctx.globalCompositeOperation = 'destination-out';
-        } else {
-            this.ctx.globalCompositeOperation = 'source-over';
-        }
-        
-        console.log(`Инструмент изменен: ${tool}`);
+        console.log(`🛠️ Инструмент изменен: ${tool}`);
     }
 
     // Установка цвета
     setColor(color) {
         this.currentColor = color;
-        this.ctx.strokeStyle = color;
+        if (this.currentTool !== 'eraser') {
+            this.ctx.strokeStyle = color;
+            this.ctx.globalCompositeOperation = 'source-over';
+        }
         
         // Обновление превью
         const preview = document.getElementById('sizePreview');
-        preview.style.color = color;
+        if (preview) {
+            preview.style.color = color;
+        }
         
-        console.log(`Цвет изменен: ${color}`);
+        console.log(`🎨 Цвет изменен: ${color}`);
     }
 
     // Установка размера
@@ -80,26 +95,34 @@ class CanvasManager {
         this.ctx.lineWidth = this.currentSize;
         
         // Обновление отображения
-        document.getElementById('sizeValue').textContent = `${this.currentSize}px`;
+        const sizeValueElement = document.getElementById('sizeValue');
+        if (sizeValueElement) {
+            sizeValueElement.textContent = `${this.currentSize}px`;
+        }
         
         // Обновление превью
         this.updateBrushPreview();
         
-        console.log(`Размер изменен: ${size}px`);
+        console.log(`📏 Размер изменен: ${size}px`);
     }
 
     // Обновление превью кисти
     updateBrushPreview() {
         const preview = document.getElementById('sizePreview');
-        preview.style.width = `${this.currentSize * 2}px`;
-        preview.style.height = `${this.currentSize * 2}px`;
+        if (preview) {
+            preview.style.width = `${this.currentSize * 2}px`;
+            preview.style.height = `${this.currentSize * 2}px`;
+            preview.style.color = this.currentColor;
+        }
     }
 
     // Начало рисования
     startDrawing(e) {
+        e.preventDefault();
+        
         this.isDrawing = true;
         
-        // Сохраняем текущее состояние в историю
+        // Сохраняем текущее состояние в историю перед изменением
         this.saveToHistory();
         
         // Получаем координаты
@@ -109,8 +132,14 @@ class CanvasManager {
         this.ctx.beginPath();
         this.ctx.moveTo(x, y);
         
+        // Рисуем первую точку (для точечных кликов)
+        this.ctx.lineTo(x, y);
+        this.ctx.stroke();
+        
         this.lastX = x;
         this.lastY = y;
+        
+        console.log('✏️ Начало рисования');
     }
 
     // Процесс рисования
@@ -122,14 +151,23 @@ class CanvasManager {
         // Получаем координаты
         const { x, y } = this.getCoordinates(e);
         
-        // Рисуем линию
+        // Настраиваем контекст в зависимости от инструмента
+        if (this.currentTool === 'eraser') {
+            this.ctx.globalCompositeOperation = 'destination-out';
+            this.ctx.strokeStyle = 'rgba(0,0,0,1)'; // Для ластика
+        } else {
+            this.ctx.globalCompositeOperation = 'source-over';
+            this.ctx.strokeStyle = this.currentColor;
+        }
+        
+        // Продолжаем путь
         this.ctx.lineTo(x, y);
         this.ctx.stroke();
         
         this.lastX = x;
         this.lastY = y;
         
-        // Дебаунс для автосохранения
+        // Автосохранение с дебаунсом
         this.debounceSave();
     }
 
@@ -139,8 +177,10 @@ class CanvasManager {
             this.isDrawing = false;
             this.ctx.closePath();
             
-            // Сохраняем изменения
+            // Сохраняем окончательные изменения
             this.saveCanvas();
+            
+            console.log('🛑 Остановка рисования');
         }
     }
 
@@ -149,9 +189,11 @@ class CanvasManager {
         e.preventDefault();
         
         if (e.type === 'touchstart') {
-            this.startDrawing(e.touches[0]);
+            const touch = e.touches[0];
+            this.startDrawing(touch);
         } else if (e.type === 'touchmove') {
-            this.draw(e.touches[0]);
+            const touch = e.touches[0];
+            this.draw(touch);
         }
     }
 
@@ -161,27 +203,41 @@ class CanvasManager {
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
         
+        let clientX, clientY;
+        
+        if (e.type.includes('touch')) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+        
         return {
-            x: (e.clientX - rect.left) * scaleX,
-            y: (e.clientY - rect.top) * scaleY
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
         };
     }
 
     // Очистка холста
     clearCanvas() {
-        // Сохраняем текущее состояние в историю
-        this.saveToHistory();
-        
-        // Очищаем холст
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // Сохраняем изменения
-        this.saveCanvas();
-        
-        console.log('Холст очищен');
+        if (confirm('Вы уверены, что хотите очистить холст? Все пользователи увидят очищенный холст.')) {
+            // Сохраняем текущее состояние в историю
+            this.saveToHistory();
+            
+            // Очищаем холст
+            this.ctx.fillStyle = '#FFFFFF';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            
+            // Сохраняем изменения
+            this.saveCanvas();
+            
+            this.showToast('Холст очищен для всех пользователей', 'success');
+            console.log('🧹 Холст очищен');
+        }
     }
 
-    // Отмена последнего действия
+    // Отмена последнего действия (только локально)
     undo() {
         if (this.history.length > 0) {
             const lastState = this.history.pop();
@@ -189,16 +245,24 @@ class CanvasManager {
             // Восстанавливаем изображение
             const img = new Image();
             img.onload = () => {
+                // Очищаем и рисуем сохраненное состояние
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
                 this.ctx.drawImage(img, 0, 0);
-                this.saveCanvas();
+                
+                // НЕ сохраняем в базу при отмене, чтобы не конфликтовать с другими
+                // Обновляем только локально
+                this.lastSavedData = this.canvas.toDataURL('image/png');
             };
             img.src = lastState;
             
             // Обновляем состояние кнопки отмены
-            document.getElementById('undoBtn').disabled = this.history.length === 0;
+            const undoBtn = document.getElementById('undoBtn');
+            if (undoBtn) {
+                undoBtn.disabled = this.history.length === 0;
+            }
             
-            console.log('Действие отменено');
+            this.showToast('Действие отменено (только локально)', 'info');
+            console.log('↩️ Действие отменено');
         }
     }
 
@@ -213,7 +277,10 @@ class CanvasManager {
         }
         
         // Активируем кнопку отмены
-        document.getElementById('undoBtn').disabled = false;
+        const undoBtn = document.getElementById('undoBtn');
+        if (undoBtn) {
+            undoBtn.disabled = false;
+        }
     }
 
     // Дебаунс для автосохранения
@@ -224,35 +291,81 @@ class CanvasManager {
         
         this.debounceTimer = setTimeout(() => {
             this.saveCanvas();
-        }, this.debounceDelay);
+        }, this.saveDelay);
     }
 
-    // Сохранение холста
-    saveCanvas() {
+    // Сохранение холста в базу
+    async saveCanvas() {
+        if (this.isLoadingExternal) {
+            console.log('⏸️ Пропускаем сохранение, загружаем внешние изменения');
+            return;
+        }
+        
         const imageData = this.canvas.toDataURL('image/png');
         
+        // Проверяем, изменилось ли изображение
+        if (this.lastSavedData === imageData) {
+            return;
+        }
+        
+        console.log('💾 Сохранение локальных изменений...');
+        
         // Сохраняем в Supabase
-        window.supabaseClient.saveCanvas(imageData)
-            .then(success => {
-                if (success) {
-                    this.showToast('Изменения сохранены', 'success');
-                    this.updateLastSaved();
-                }
-            });
+        const success = await window.supabaseClient.saveCanvas(imageData);
+        
+        if (success) {
+            this.lastSavedData = imageData;
+            this.updateLastSaved();
+            
+            // Показываем уведомление только при явном сохранении
+            if (!this.isDrawing) {
+                this.showToast('Изменения сохранены', 'success');
+            }
+        } else {
+            this.showToast('Ошибка сохранения', 'error');
+        }
     }
 
-    // Загрузка изображения на холст
-    loadImage(imageData) {
+    // Загрузка изображения на холст (используется для внешних обновлений)
+    loadImage(imageData, isExternal = false) {
         if (!imageData) return;
+        
+        // Устанавливаем флаг загрузки внешних данных
+        if (isExternal) {
+            this.isLoadingExternal = true;
+        }
         
         const img = new Image();
         img.onload = () => {
+            // Сохраняем текущее состояние в историю перед обновлением
+            if (!isExternal) {
+                this.saveToHistory();
+            }
+            
             // Очищаем холст и рисуем загруженное изображение
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
             this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
             
-            console.log('Изображение загружено на холст');
+            // Обновляем последние сохраненные данные
+            this.lastSavedData = this.canvas.toDataURL('image/png');
+            
+            if (isExternal) {
+                console.log('🔄 Холст обновлен внешними изменениями');
+                this.showToast('Холст обновлен другим пользователем', 'info');
+            }
+            
+            // Снимаем флаг после завершения
+            this.isLoadingExternal = false;
         };
+        
+        img.onerror = (error) => {
+            console.error('❌ Ошибка загрузки изображения:', error);
+            this.isLoadingExternal = false;
+            if (isExternal) {
+                this.showToast('Ошибка загрузки обновлений', 'error');
+            }
+        };
+        
         img.src = imageData;
     }
 
@@ -265,8 +378,10 @@ class CanvasManager {
             second: '2-digit'
         });
         
-        document.getElementById('lastUpdated').textContent = 
-            `Последнее обновление: ${timeString}`;
+        const lastUpdatedElement = document.getElementById('lastUpdated');
+        if (lastUpdatedElement) {
+            lastUpdatedElement.textContent = `Последнее обновление: ${timeString}`;
+        }
     }
 
     // Получение данных холста
@@ -280,6 +395,7 @@ class CanvasManager {
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         toast.textContent = message;
+        toast.style.zIndex = '10000';
         
         // Добавляем на страницу
         document.body.appendChild(toast);
@@ -290,8 +406,22 @@ class CanvasManager {
         // Удаляем через 3 секунды
         setTimeout(() => {
             toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 300);
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
         }, 3000);
+    }
+
+    // Сброс состояния (для отладки)
+    resetState() {
+        this.history = [];
+        this.lastSavedData = null;
+        const undoBtn = document.getElementById('undoBtn');
+        if (undoBtn) {
+            undoBtn.disabled = true;
+        }
     }
 }
 
