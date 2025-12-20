@@ -1,1 +1,194 @@
-
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Доступ к камере на GitHub Pages</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        video { width: 100%; max-width: 640px; border: 2px solid #333; }
+        .controls { margin: 20px 0; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .error { color: red; }
+        .permission-info {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Демонстрация работы с камерой</h1>
+    
+    <div class="permission-info">
+        <p>⚠️ Для работы потребуется разрешение на доступ к камере.</p>
+        <p>GitHub Pages работает по HTTPS, поэтому доступ к медиаустройствам возможен.</p>
+    </div>
+    
+    <div class="controls">
+        <button id="startBtn">Включить камеру</button>
+        <button id="stopBtn" disabled>Выключить камеру</button>
+        <button id="captureBtn" disabled>Сделать фото</button>
+        <button id="toggleFullscreen">Полный экран</button>
+    </div>
+    
+    <div>
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas" style="display: none;"></canvas>
+    </div>
+    
+    <div id="photos"></div>
+    
+    <div id="error" class="error"></div>
+    
+    <script>
+        // Элементы DOM
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const photosContainer = document.getElementById('photos');
+        const errorDiv = document.getElementById('error');
+        
+        // Кнопки
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const toggleFullscreenBtn = document.getElementById('toggleFullscreen');
+        
+        let stream = null;
+        
+        // Настройки камеры (можно изменить)
+        const constraints = {
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                facingMode: 'user' // 'user' - фронтальная, 'environment' - задняя
+            },
+            audio: false // отключаем аудио
+        };
+        
+        // Включить камеру
+        async function startCamera() {
+            errorDiv.textContent = '';
+            
+            try {
+                // Запрашиваем доступ к камере
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                
+                // Показываем поток в видеоэлементе
+                video.srcObject = stream;
+                
+                // Активируем кнопки
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                captureBtn.disabled = false;
+                
+                console.log('Камера успешно запущена');
+                
+            } catch (err) {
+                errorDiv.textContent = `Ошибка: ${err.name} - ${err.message}`;
+                console.error('Ошибка доступа к камере:', err);
+                
+                // Показываем возможные причины
+                if (err.name === 'NotFoundError') {
+                    errorDiv.textContent += ' - Камера не найдена';
+                } else if (err.name === 'NotAllowedError') {
+                    errorDiv.textContent += ' - Доступ запрещен пользователем';
+                } else if (err.name === 'NotReadableError') {
+                    errorDiv.textContent += ' - Камера используется другим приложением';
+                }
+            }
+        }
+        
+        // Выключить камеру
+        function stopCamera() {
+            if (stream) {
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+                video.srcObject = null;
+                stream = null;
+                
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                captureBtn.disabled = true;
+                
+                console.log('Камера выключена');
+            }
+        }
+        
+        // Сделать фото
+        function capturePhoto() {
+            if (!stream) return;
+            
+            // Устанавливаем размеры canvas равными видео
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // Рисуем текущий кадр видео на canvas
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Создаем элемент изображения
+            const img = document.createElement('img');
+            img.src = canvas.toDataURL('image/png');
+            img.style.maxWidth = '200px';
+            img.style.margin = '10px';
+            img.style.border = '1px solid #ccc';
+            
+            // Добавляем фото в контейнер
+            photosContainer.appendChild(img);
+            
+            console.log('Фото сохранено');
+        }
+        
+        // Полноэкранный режим для видео
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                video.requestFullscreen().catch(err => {
+                    console.error('Ошибка полноэкранного режима:', err);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+        
+        // Обработчики событий
+        startBtn.addEventListener('click', startCamera);
+        stopBtn.addEventListener('click', stopCamera);
+        captureBtn.addEventListener('click', capturePhoto);
+        toggleFullscreenBtn.addEventListener('click', toggleFullscreen);
+        
+        // При закрытии страницы выключаем камеру
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+            }
+        });
+        
+        // Проверка поддержки медиаустройств
+        window.addEventListener('load', () => {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                errorDiv.textContent = 'Ваш браузер не поддерживает доступ к камере';
+                startBtn.disabled = true;
+            }
+        });
+    </script>
+    
+    <h2>Что можно делать с этими данными:</h2>
+    <ul>
+        <li>Создавать фото- и видеоприложения</li>
+        <li>Реализовать AR (дополненную реальность) с помощью библиотек типа AR.js</li>
+        <li>Создать видеозвонки (WebRTC)</li>
+        <li>Распознавание лиц или объектов (с помощью TensorFlow.js)</li>
+        <li>Сканирование QR-кодов</li>
+    </ul>
+    
+    <h2>Важные ограничения:</h2>
+    <ol>
+        <li>Требуется <strong>HTTPS</strong> (GitHub Pages предоставляет его автоматически)</li>
+        <li>Пользователь должен дать <strong>явное разрешение</strong></li>
+        <li>На мобильных устройствах могут быть дополнительные ограничения</li>
+        <li>Нельзя сохранять видео на GitHub Pages (нужен сервер для загрузки)</li>
+    </ol>
+</body>
+</html>
